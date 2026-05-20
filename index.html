@@ -1986,12 +1986,10 @@ async function fetchFromAPI(){
       renderBackendAILog(json.aiLogs[json.aiLogs.length - 1]);
     }
 
-    // Merge remote data with local (remote wins for same dates)
+    // Remote data is authoritative — replace local completely
     if(json.data && json.data.length){
-      const local  = DB.load()||[];
-      const remote = json.data;
-      const merged = mergeDatasets(local, remote);
-      DB.save(merged);
+      DB.save(json.data);
+      renderAll(json.data);
     }
 
     // Update last-sync timestamp
