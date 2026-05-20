@@ -663,7 +663,17 @@ footer{
   <span class="int-sep">·</span>
   <div class="int-item">
     <div class="int-dot unknown" id="dot-sheets"></div>
-    <span class="int-lbl" id="lbl-sheets">Google Sheets</span>
+    <span class="int-lbl" id="lbl-sheets">Sheets</span>
+  </div>
+  <span class="int-sep">·</span>
+  <div class="int-item">
+    <div class="int-dot unknown" id="dot-openai"></div>
+    <span class="int-lbl" id="lbl-openai">OpenAI</span>
+  </div>
+  <span class="int-sep">·</span>
+  <div class="int-item">
+    <div class="int-dot unknown" id="dot-telegram"></div>
+    <span class="int-lbl" id="lbl-telegram">Telegram</span>
   </div>
   <div class="fetch-progress" id="fetch-progress" style="width:120px;margin-left:8px;opacity:0">
     <div class="fetch-progress-bar" id="fetch-bar"></div>
@@ -1004,9 +1014,11 @@ footer{
       <!-- Connection status -->
       <div class="set-section">
         <div class="set-title">📡 Status das Integrações</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
           <div class="set-status" id="ss-meta"><div class="int-dot unknown" id="ss-dot-meta"></div>Meta Ads API</div>
           <div class="set-status" id="ss-sh">  <div class="int-dot unknown" id="ss-dot-sh"></div>Google Sheets</div>
+          <div class="set-status"><div class="int-dot unknown" id="ss-dot-openai"></div>OpenAI GPT</div>
+          <div class="set-status"><div class="int-dot unknown" id="ss-dot-tg"></div>Telegram Bot</div>
         </div>
       </div>
 
@@ -1881,8 +1893,13 @@ function updateDate(){
 // ─────────────────────────────────
 const INT_KEY = 'fatburn_int_cfg';
 
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzV6FQMuQQKXShqHrD4d5ZSYIhW-A3APNgpkiqRt_9IhVA3LzhGoIJUR0kkakE8NlhJAg/exec';
 function loadIntCfg(){
-  try{ return JSON.parse(localStorage.getItem(INT_KEY))||{}; }catch(e){ return {}; }
+  try{
+    const stored = JSON.parse(localStorage.getItem(INT_KEY))||{};
+    if(!stored.url) stored.url = DEFAULT_SCRIPT_URL;
+    return stored;
+  }catch(e){ return {url: DEFAULT_SCRIPT_URL}; }
 }
 function saveIntCfg(cfg){ try{ localStorage.setItem(INT_KEY,JSON.stringify(cfg)); }catch(e){ console.warn('saveIntCfg:', e.message); } }
 
@@ -1915,8 +1932,10 @@ function hideProgress(){
 function setIntStatus(service, state, label){
   // state: 'ok' | 'err' | 'syncing' | 'unknown'
   const ids = {
-    meta:   ['dot-meta','lbl-meta','ss-dot-meta'],
-    sheets: ['dot-sheets','lbl-sheets','ss-dot-sh'],
+    meta:     ['dot-meta',     'lbl-meta',     'ss-dot-meta'],
+    sheets:   ['dot-sheets',   'lbl-sheets',   'ss-dot-sh'],
+    openai:   ['dot-openai',   'lbl-openai',   'ss-dot-openai'],
+    telegram: ['dot-telegram', 'lbl-telegram', 'ss-dot-tg'],
   };
   const map = ids[service]; if(!map) return;
   [map[0],map[2]].forEach(id=>{
@@ -1928,7 +1947,7 @@ function setIntStatus(service, state, label){
 }
 
 function setAllIntStatus(state){
-  ['meta','sheets'].forEach(s=>setIntStatus(s,state));
+  ['meta','sheets','openai','telegram'].forEach(s=>setIntStatus(s,state));
 }
 
 // Main sync — fetch data from Apps Script web app
@@ -1957,8 +1976,15 @@ async function fetchFromAPI(){
 
     // Update integration dots
     const ints = json.integrations||{};
-    setIntStatus('meta',   ints.meta  ==='connected'?'ok':'err', 'Meta Ads');
-    setIntStatus('sheets', ints.sheets==='connected'?'ok':'err', 'Sheets');
+    setIntStatus('meta',     ints.meta    ==='connected'?'ok':'err', 'Meta Ads');
+    setIntStatus('sheets',   ints.sheets  ==='connected'?'ok':'err', 'Sheets');
+    setIntStatus('openai',   ints.openai  ==='connected'?'ok':'err', 'OpenAI');
+    setIntStatus('telegram', ints.telegram==='connected'?'ok':'err', 'Telegram');
+
+    // Show latest AI log from backend if available
+    if(json.aiLogs && json.aiLogs.length > 0){
+      renderBackendAILog(json.aiLogs[json.aiLogs.length - 1]);
+    }
 
     // Merge remote data with local (remote wins for same dates)
     if(json.data && json.data.length){
@@ -2283,6 +2309,36 @@ function exportCSV(){
   a.href=url; a.download='fatburn_ads_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click(); URL.revokeObjectURL(url);
   toast('⬇ CSV exportado com sucesso!');
+}
+
+// ─────────────────────────────────
+// BACKEND AI LOG
+// ─────────────────────────────────
+function renderBackendAILog(log){
+  let el = document.getElementById('backend-ai-banner');
+  if(!el){
+    // Create banner inside #s-ai section
+    const sec = document.getElementById('s-ai');
+    if(!sec) return;
+    el = document.createElement('div');
+    el.id = 'backend-ai-banner';
+    el.style.cssText = 'background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap';
+    sec.insertBefore(el, sec.firstChild);
+  }
+  const recColors = {ESCALAR:'#7de87d',MANTER:'var(--gd)',OTIMIZAR:'var(--am)',PAUSAR:'#ff7f7f'};
+  const recEmoji  = {ESCALAR:'🚀',MANTER:'✅',OTIMIZAR:'⚠️',PAUSAR:'🛑'};
+  const rec = log.recommendation || 'N/A';
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--t4);font-family:'Courier New',monospace;letter-spacing:1px;white-space:nowrap">🤖 ANÁLISE BACKEND · ${log.date}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="background:${recColors[rec]||'var(--t3)'};color:#0d1a0d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px;letter-spacing:.5px">${recEmoji[rec]||''} ${rec}</span>
+      <span style="font-size:12px;color:var(--t2)">${log.summary||''}</span>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:12px;font-size:11px;color:var(--t3);white-space:nowrap">
+      <span>⚠ Risco <b style="color:var(--t1)">${log.risk_score}/10</b></span>
+      <span>🚀 Escala <b style="color:var(--t1)">${log.scale_score}/10</b></span>
+      <span>🏆 <b style="color:var(--t1)">${log.winner||'N/A'}</b></span>
+    </div>`;
 }
 
 // ─────────────────────────────────
