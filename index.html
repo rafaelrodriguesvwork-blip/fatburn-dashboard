@@ -725,7 +725,7 @@ footer{
         <div class="chart-title">Performance Diária — Últimos 14 Dias</div>
         <div class="legend">
           <div class="leg"><div class="leg-dot" style="background:#4db86a"></div>Vendas</div>
-          <div class="leg"><div class="leg-dot" style="background:#c9a84c"></div>Gasto £</div>
+          <div class="leg"><div class="leg-dot" style="background:#c9a84c"></div>Gasto R$</div>
           <div class="leg"><div class="leg-dot" style="background:rgba(74,158,197,.7)"></div>ROAS</div>
         </div>
       </div>
@@ -757,8 +757,8 @@ footer{
           <tr>
             <th>Anúncio</th>
             <th>Impressões</th><th>Cliques</th><th>CTR</th>
-            <th>Gasto £</th><th>Vendas</th><th>Receita £</th>
-            <th>CPA £</th><th>ROAS</th><th>Lucro £</th>
+            <th>Gasto R$</th><th>Vendas</th><th>Receita £</th>
+            <th>CPA R$</th><th>ROAS</th><th>Lucro R$</th>
           </tr>
         </thead>
         <tbody id="ad-tbody"></tbody>
@@ -835,9 +835,9 @@ footer{
         <thead>
           <tr>
             <th>Data</th>
-            <th>Gasto £</th><th>Impressões</th><th>Cliques</th>
+            <th>Gasto R$</th><th>Impressões</th><th>Cliques</th>
             <th>CTR</th><th>Vendas</th><th>Receita £</th>
-            <th>Lucro £</th><th>CPA £</th><th>ROAS</th><th>CPM £</th>
+            <th>Lucro R$</th><th>CPA R$</th><th>ROAS</th><th>CPM R$</th>
           </tr>
         </thead>
         <tbody id="hist-tbody"></tbody>
@@ -1072,7 +1072,8 @@ footer{
 // ─────────────────────────────────
 // CONFIG
 // ─────────────────────────────────
-const PRICE = 17;
+const PRICE = 17;        // £ por venda
+const GBP_TO_BRL = 7.80; // taxa de câmbio
 const STORAGE = 'fatburn_v2';
 
 // ─────────────────────────────────
@@ -1116,12 +1117,13 @@ const DB = {
 // ─────────────────────────────────
 const C = {
   ctr(cl,im){ return im?(cl/im)*100:0; },
-  cpa(sp,sa){ return sa?sp/sa:null; },
-  roas(sa,sp){ return sp?(sa*PRICE)/sp:0; },
-  cpm(sp,im){ return im?(sp/im)*1000:0; },
-  rev(sa){ return sa*PRICE; },
-  profit(sa,sp){ return C.rev(sa)-sp; },
-  margin(sa,sp){ const r=C.rev(sa); return r?(C.profit(sa,sp)/r)*100:null; },
+  cpa(sp,sa){ return sa?sp/sa:null; },                          // R$/venda
+  roas(sa,sp){ return sp?(sa*PRICE*GBP_TO_BRL)/sp:0; },        // R$receita / R$gasto
+  cpm(sp,im){ return im?(sp/im)*1000:0; },                     // R$ CPM
+  rev(sa){ return sa*PRICE; },                                  // £ receita
+  revBrl(sa){ return sa*PRICE*GBP_TO_BRL; },                   // R$ receita
+  profit(sa,sp){ return C.revBrl(sa)-sp; },                    // R$ lucro
+  margin(sa,sp){ const r=C.revBrl(sa); return r?(C.profit(sa,sp)/r)*100:null; },
   cvr(sa,cl){ return cl?(sa/cl)*100:0; },
 };
 
@@ -1130,6 +1132,7 @@ const C = {
 // ─────────────────────────────────
 const F = {
   gbp(n){ return n==null||isNaN(n)?'—':'£'+n.toFixed(2); },
+  brl(n){ return n==null||isNaN(n)?'—':'R$'+n.toFixed(2); },
   pct(n,d=2){ return n==null||isNaN(n)?'—':n.toFixed(d)+'%'; },
   num(n){ return n==null?'—':Math.round(n).toLocaleString('en-GB'); },
   x(n,d=2){ return n==null||isNaN(n)?'—':n.toFixed(d)+'×'; },
@@ -1198,8 +1201,8 @@ function genAlerts(data){
   const tcpm=C.cpm(T.spend,T.impressions);
   const tpro=C.profit(T.sales,T.spend);
 
-  if(tcpa!=null&&tcpa>80) A.push({t:'danger',icon:'🚨',title:'CPA Crítico',detail:`£${tcpa.toFixed(2)} por venda — acima do limite de £80. Pausar imediatamente.`,val:F.gbp(tcpa)});
-  else if(tcpa!=null&&tcpa>50) A.push({t:'warning',icon:'⚠️',title:'CPA Elevado',detail:`£${tcpa.toFixed(2)} por venda. Zona de atenção (entre £50 e £80). Monitorar.`,val:F.gbp(tcpa)});
+  if(tcpa!=null&&tcpa>624) A.push({t:'danger',icon:'🚨',title:'CPA Crítico',detail:`R$${tcpa.toFixed(2)} por venda — acima do limite de R$624. Pausar imediatamente.`,val:F.brl(tcpa)});
+  else if(tcpa!=null&&tcpa>390) A.push({t:'warning',icon:'⚠️',title:'CPA Elevado',detail:`R$${tcpa.toFixed(2)} por venda. Zona de atenção (entre R$390 e R$624). Monitorar.`,val:F.brl(tcpa)});
 
   if(troas<1&&T.sales>0) A.push({t:'danger',icon:'📉',title:'Campanha em Prejuízo',detail:`ROAS de ${troas.toFixed(2)}× — cada £1 gasto retorna apenas £${troas.toFixed(2)}.`,val:F.x(troas)});
   else if(troas>=1&&troas<1.5&&T.sales>0) A.push({t:'warning',icon:'📊',title:'ROAS Abaixo do Ideal',detail:`${troas.toFixed(2)}× ainda não é sustentável a longo prazo. Meta: acima de 2×.`,val:F.x(troas)});
@@ -1212,16 +1215,16 @@ function genAlerts(data){
     }
     const yc=C.cpm(Y.spend,Y.impressions);
     if(yc>0&&tcpm>yc*1.3){
-      A.push({t:'warning',icon:'💰',title:'CPM com Alta Significativa',detail:`CPM subiu de ${F.gbp(yc)} para ${F.gbp(tcpm)} (+${Math.round((tcpm/yc-1)*100)}%). Possível saturação.`,val:'+'+Math.round((tcpm/yc-1)*100)+'%'});
+      A.push({t:'warning',icon:'💰',title:'CPM com Alta Significativa',detail:`CPM subiu de ${F.brl(yc)} para ${F.brl(tcpm)} (+${Math.round((tcpm/yc-1)*100)}%). Possível saturação.`,val:'+'+Math.round((tcpm/yc-1)*100)+'%'});
     }
   }
 
   if(tctr<0.5) A.push({t:'danger',icon:'👁',title:'CTR Muito Baixo',detail:`${tctr.toFixed(2)}% — criativo não está engajando. Meta mínima: 1%.`,val:F.pct(tctr)});
   else if(tctr<1) A.push({t:'warning',icon:'👁',title:'CTR Abaixo de 1%',detail:`${tctr.toFixed(2)}% indica pouco interesse no criativo. Considere testar nova abordagem.`,val:F.pct(tctr)});
 
-  if(T.sales===0&&T.spend>10) A.push({t:'danger',icon:'💸',title:'Nenhuma Venda Hoje',detail:`${F.gbp(T.spend)} gastos sem conversão. Verifique pixel, landing page e oferta.`,val:'£0 receita'});
+  if(T.sales===0&&T.spend>10) A.push({t:'danger',icon:'💸',title:'Nenhuma Venda Hoje',detail:`${F.brl(T.spend)} gastos sem conversão. Verifique pixel, landing page e oferta.`,val:'£0 receita'});
 
-  if(tpro>50) A.push({t:'success',icon:'💚',title:`Lucro de ${F.gbp(tpro)} no Período`,detail:`Receita de ${F.gbp(C.rev(T.sales))} com gasto de ${F.gbp(T.spend)}. Ótima performance!`,val:F.gbp(tpro)});
+  if(tpro>390) A.push({t:'success',icon:'💚',title:`Lucro de ${F.brl(tpro)} no Período`,detail:`Receita de ${F.gbp(C.rev(T.sales))} com gasto de ${F.brl(T.spend)}. Ótima performance!`,val:F.brl(tpro)});
 
   if(!A.length) A.push({t:'info',icon:'ℹ️',title:'Campanha Estável',detail:'Nenhum alerta crítico no momento. Continue monitorando as métricas diariamente.',val:'OK'});
   return A;
@@ -1634,14 +1637,14 @@ function renderMetrics(T,Y,sorted){
   }
 
   const L7s=sorted.slice(-7);
-  setMC('m-spend',F.gbp(T.spend),'gold','d-spend',F.ddelta(T.spend,Y?.spend),'sp-spend',L7s.map(d=>d.spend),'#c9a84c');
+  setMC('m-spend',F.brl(T.spend),'gold','d-spend',F.ddelta(T.spend,Y?.spend),'sp-spend',L7s.map(d=>d.spend),'#c9a84c');
   setMC('m-imp',F.num(T.impressions),'','d-imp',F.ddelta(T.impressions,Y?.impressions),'sp-imp',L7s.map(d=>d.impressions),'#4a9ec5');
   setMC('m-clk',F.num(T.clicks),'','d-clk',F.ddelta(T.clicks,Y?.clicks),'sp-clk',L7s.map(d=>d.clicks),'#4a9ec5');
   setMC('m-ctr',F.pct(ctr),'','d-ctr',F.ddelta(ctr,Yctr),'sp-ctr',L7s.map(d=>C.ctr(d.clicks,d.impressions)),'#4db86a');
   setMC('m-sales',T.sales.toString(),'good','d-sales',F.ddelta(T.sales,Y?.sales),'sp-sales',L7s.map(d=>d.sales),'#4db86a');
-  setMC('m-cpa',cpa?F.gbp(cpa):'—',(cpa>80?'bad':cpa>50?'warn':'good'),'d-cpa',F.ddelta(cpa,Ycpa,true),'sp-cpa',L7s.map(d=>C.cpa(d.spend,d.sales)),'#e09a20');
+  setMC('m-cpa',cpa?F.brl(cpa):'—',(cpa>624?'bad':cpa>390?'warn':'good'),'d-cpa',F.ddelta(cpa,Ycpa,true),'sp-cpa',L7s.map(d=>C.cpa(d.spend,d.sales)),'#e09a20');
   setMC('m-roas',F.x(roas),(roas>=2?'good':roas>=1?'warn':'bad'),'d-roas',F.ddelta(roas,Yroas),'sp-roas',L7s.map(d=>C.roas(d.sales,d.spend)),'#c9a84c');
-  setMC('m-cpm',F.gbp(cpm),'','d-cpm',F.ddelta(cpm,Ycpm,true),'sp-cpm',L7s.map(d=>C.cpm(d.spend,d.impressions)),'#e09a20');
+  setMC('m-cpm',F.brl(cpm),'','d-cpm',F.ddelta(cpm,Ycpm,true),'sp-cpm',L7s.map(d=>C.cpm(d.spend,d.impressions)),'#e09a20');
 }
 
 function renderProfit(T){
@@ -1649,12 +1652,12 @@ function renderProfit(T){
   const rev=C.rev(T.sales), profit=C.profit(T.sales,T.spend);
   const margin=C.margin(T.sales,T.spend), cvr=C.cvr(T.sales,T.clicks);
   const pe=document.getElementById('p-profit');
-  pe.textContent=F.gbp(profit);
+  pe.textContent=F.brl(profit);                 // Lucro em R$
   pe.className='pval '+(profit>=0?'pos':'neg');
   const me=document.getElementById('p-margin');
   me.textContent=margin?margin.toFixed(1)+'%':'—';
   me.className='pval '+(margin>=40?'pos':margin>=0?'gold':'neg');
-  document.getElementById('p-rev').textContent=F.gbp(rev);
+  document.getElementById('p-rev').textContent=F.gbp(rev);   // Receita em £
   document.getElementById('p-cvr').textContent=cvr.toFixed(2)+'%';
 }
 
@@ -1711,13 +1714,13 @@ function renderComparison(sorted){
   const avg=(fn)=>L7.reduce((a,d)=>a+fn(d),0)/L7.length;
 
   const rows=[
-    {lbl:'Gasto £',  tv:T.spend,           yv:Y?.spend,        av:avg(d=>d.spend),          fmt:F.gbp,  lb:false,neu:true},
+    {lbl:'Gasto R$', tv:T.spend,            yv:Y?.spend,        av:avg(d=>d.spend),          fmt:F.brl,  lb:false,neu:true},
     {lbl:'Vendas',   tv:T.sales,            yv:Y?.sales,        av:avg(d=>d.sales),           fmt:v=>Math.round(v).toString(),lb:false},
     {lbl:'CTR',      tv:C.ctr(T.clicks,T.impressions),yv:Y?C.ctr(Y.clicks,Y.impressions):null,av:avg(d=>C.ctr(d.clicks,d.impressions)),fmt:v=>v.toFixed(2)+'%',lb:false},
-    {lbl:'CPM £',    tv:C.cpm(T.spend,T.impressions),yv:Y?C.cpm(Y.spend,Y.impressions):null,av:avg(d=>C.cpm(d.spend,d.impressions)),fmt:F.gbp,lb:true},
-    {lbl:'CPA £',    tv:C.cpa(T.spend,T.sales),yv:Y?C.cpa(Y.spend,Y.sales):null,av:avg(d=>C.cpa(d.spend,d.sales)||0),fmt:v=>v?F.gbp(v):'—',lb:true},
+    {lbl:'CPM R$',   tv:C.cpm(T.spend,T.impressions),yv:Y?C.cpm(Y.spend,Y.impressions):null,av:avg(d=>C.cpm(d.spend,d.impressions)),fmt:F.brl,lb:true},
+    {lbl:'CPA R$',   tv:C.cpa(T.spend,T.sales),yv:Y?C.cpa(Y.spend,Y.sales):null,av:avg(d=>C.cpa(d.spend,d.sales)||0),fmt:v=>v?F.brl(v):'—',lb:true},
     {lbl:'ROAS',     tv:C.roas(T.sales,T.spend),yv:Y?C.roas(Y.sales,Y.spend):null,av:avg(d=>C.roas(d.sales,d.spend)),fmt:v=>v.toFixed(2)+'×',lb:false},
-    {lbl:'Lucro £',  tv:C.profit(T.sales,T.spend),yv:Y?C.profit(Y.sales,Y.spend):null,av:avg(d=>C.profit(d.sales,d.spend)),fmt:F.gbp,lb:false},
+    {lbl:'Lucro R$', tv:C.profit(T.sales,T.spend),yv:Y?C.profit(Y.sales,Y.spend):null,av:avg(d=>C.profit(d.sales,d.spend)),fmt:F.brl,lb:false},
   ];
 
   const html=rows.map(r=>{
@@ -1767,19 +1770,19 @@ function renderAdTable(sorted){
       <td>${F.num(t.imp)}</td>
       <td>${F.num(t.clk)}</td>
       <td class="${i===bestCTR?'c-em':'c-mu'}">${F.pct(ctr)}</td>
-      <td>${F.gbp(t.spend)}</td>
-      <td class="${i===bestROAS?'c-em':''}">${t.sales}</td>
+      <td>${F.brl(t.spend)}</td>
+  <td class="${i===bestROAS?'c-em':''}">${t.sales}</td>
       <td>${F.gbp(rev)}</td>
-      <td class="${i===bestCPA?'c-em':'c-mu'}">${cpa?F.gbp(cpa):'—'}</td>
+      <td class="${i===bestCPA?'c-em':'c-mu'}">${cpa?F.brl(cpa):'—'}</td>
       <td class="${i===bestROAS?'c-em c-go':''}">${F.x(roas)}</td>
-      <td class="${profit>=0?'c-em':'c-rd'}">${F.gbp(profit)}</td>
+      <td class="${profit>=0?'c-em':'c-rd'}">${F.brl(profit)}</td>
     </tr>`;
   }).join('');
 
   const tot=totals.reduce((a,t)=>({imp:a.imp+t.imp,clk:a.clk+t.clk,spend:a.spend+t.spend,sales:a.sales+t.sales}),{imp:0,clk:0,spend:0,sales:0});
   const tctr=C.ctr(tot.clk,tot.imp), tcpa=C.cpa(tot.spend,tot.sales);
   const troas=C.roas(tot.sales,tot.spend), trev=C.rev(tot.sales), tpro=C.profit(tot.sales,tot.spend);
-  document.getElementById('ad-tfoot').innerHTML=`<td>TOTAL</td><td>${F.num(tot.imp)}</td><td>${F.num(tot.clk)}</td><td>${F.pct(tctr)}</td><td>${F.gbp(tot.spend)}</td><td>${tot.sales}</td><td>${F.gbp(trev)}</td><td>${tcpa?F.gbp(tcpa):'—'}</td><td>${F.x(troas)}</td><td>${F.gbp(tpro)}</td>`;
+  document.getElementById('ad-tfoot').innerHTML=`<td>TOTAL</td><td>${F.num(tot.imp)}</td><td>${F.num(tot.clk)}</td><td>${F.pct(tctr)}</td><td>${F.brl(tot.spend)}</td><td>${tot.sales}</td><td>${F.gbp(trev)}</td><td>${tcpa?F.brl(tcpa):'—'}</td><td>${F.x(troas)}</td><td>${F.brl(tpro)}</td>`;
   if(sorted.length){ const f=F.date(sorted[0].date),l=F.date(sorted[sorted.length-1].date); document.getElementById('ads-period').textContent=`${f} → ${l} · ${sorted.length}d`; }
 }
 
@@ -1811,16 +1814,16 @@ function renderHistory(sorted){
     const profit=C.profit(d.sales,d.spend), cpm=C.cpm(d.spend,d.impressions);
     return `<tr>
       <td>${F.date(d.date)}</td>
-      <td>${F.gbp(d.spend)}</td>
+      <td>${F.brl(d.spend)}</td>
       <td>${F.num(d.impressions)}</td>
       <td>${F.num(d.clicks)}</td>
       <td>${F.pct(ctr)}</td>
       <td>${d.sales}</td>
       <td>${F.gbp(rev)}</td>
-      <td class="${profit>=0?'c-em':'c-rd'}">${F.gbp(profit)}</td>
-      <td class="${cpa&&cpa>80?'c-rd':cpa&&cpa<40?'c-em':''}">${cpa?F.gbp(cpa):'—'}</td>
+      <td class="${profit>=0?'c-em':'c-rd'}">${F.brl(profit)}</td>
+      <td class="${cpa&&cpa>624?'c-rd':cpa&&cpa<312?'c-em':''}">${cpa?F.brl(cpa):'—'}</td>
       <td class="${roas>=2?'c-em':roas>=1?'c-am':'c-rd'}">${F.x(roas)}</td>
-      <td>${F.gbp(cpm)}</td>
+      <td>${F.brl(cpm)}</td>
     </tr>`;
   }).join('');
 }
